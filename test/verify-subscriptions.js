@@ -290,16 +290,25 @@ const csrfOf = (html) => (html.match(/name="_csrf"\s+value="([^"]+)"/) || [])[1]
   const csrf = csrfOf(r.text);
 
   /* 新建：年付订阅（月均应被摊平） */
+  // 扣费日必须相对今天取未来值：写死具体日期，测试过几天就会因为「过期自动顺延」而红
+  const futureDate = (days) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const p = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
+  const yearlyNext = futureDate(45);
   const created = await req('POST', '/subscriptions', { form: {
     _csrf: csrf, name: 'Adobe 全家桶', icon: '🎨', plan: '摄影计划', amount: '888.00', currency: 'CNY',
-    cycle: 'yearly', cycle_n: '1', anchor_month: '11', anchor_day: '20', next_charge_at: '2026-11-20',
+    cycle: 'yearly', cycle_n: '1', anchor_month: yearlyNext.slice(5, 7), anchor_day: yearlyNext.slice(8, 10),
+    next_charge_at: yearlyNext,
     status: 'active', reminder_days: '5', auto_renew: '1', note: '年付比月付便宜',
   } });
   check('新建年付订阅', created.status === 302, `HTTP ${created.status}`);
   r = await req('GET', '/subscriptions');
   check('列表出现新订阅', r.text.includes('Adobe 全家桶'));
   check('年付按 1/12 摊平显示月均', r.text.includes('月均') && /74\.00/.test(r.text), '期望月均 ¥74.00');
-  check('展示「每年 / 年付月份」信息', /2026-11-20/.test(r.text));
+  check('展示「每年 / 年付月份」信息', r.text.includes(yearlyNext), yearlyNext);
   const idAdobe = (r.text.match(/\/subscriptions\/(\d+)\/charge/) || [])[1];
   check('取到订阅 id', !!idAdobe, String(idAdobe));
 
@@ -320,13 +329,14 @@ const csrfOf = (html) => (html.match(/name="_csrf"\s+value="([^"]+)"/) || [])[1]
   check('缺名称时拒绝创建', bad.status === 302, `HTTP ${bad.status}`);
 
   /* 唯一锚点 = 下次扣费日：扣费日从该日期推导（日历轮询模型） */
+  const monthlyNext = futureDate(20);
   r = await req('GET', '/subscriptions');
   await req('POST', '/subscriptions', { form: {
     _csrf: csrfOf(r.text), name: '锚点月付', icon: '🧾', amount: '30.00',
-    cycle: 'monthly', next_charge_at: '2026-11-15', status: 'active', auto_renew: '1',
+    cycle: 'monthly', next_charge_at: monthlyNext, status: 'active', auto_renew: '1',
   } });
   r = await req('GET', '/subscriptions');
-  check('月付以下次扣费日为锚（11-15 存储且扣费日=15）', r.text.includes('锚点月付') && r.text.includes('2026-11-15'), '');
+  check(`月付以下次扣费日为锚（${monthlyNext} 原样存储）`, r.text.includes('锚点月付') && r.text.includes(monthlyNext), monthlyNext);
 
   r = await req('GET', '/subscriptions');
   await req('POST', '/subscriptions', { form: {
