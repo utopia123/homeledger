@@ -178,7 +178,8 @@ router.post('/recurring', auth.requireLogin, auth.requireLedgerWrite, (req, res)
     const amt = u.parseAmountToCents(amounts[i]);
     if (!amt) return;
     items.push({
-      type: t || 'expense', amount_cents: amt,
+      // 只允许收支两类：周期账单的明细没有「转入账户」，转账/投资类会记成单边流水导致资金凭空消失
+      type: t === 'income' ? 'income' : 'expense', amount_cents: amt,
       category_id: cats[i] ? Number(cats[i]) : null,
       account_id: accs[i] ? Number(accs[i]) : null,
       note: notes[i] || name,
@@ -188,7 +189,7 @@ router.post('/recurring', auth.requireLogin, auth.requireLedgerWrite, (req, res)
   if (!items.length) { res.flash('error', '请至少填写一项金额'); return res.redirect('/recurring'); }
 
   const frequency = ['daily', 'weekly', 'monthly', 'yearly'].includes(req.body.frequency) ? req.body.frequency : 'monthly';
-  let next = /^d{4}-d{2}-d{2}$/.test(String(req.body.next_run_at || '')) ? req.body.next_run_at : todayStr();
+  let next = /^\d{4}-\d{2}-\d{2}$/.test(String(req.body.next_run_at || '')) ? req.body.next_run_at : todayStr();
   // 若首次执行日已过，自动推到下一个周期
   let guard = 0;
   while (next < todayStr() && guard++ < 400) next = sch.advanceDate(next, { frequency, interval_n: Number(req.body.interval_n) || 1, day_of_month: req.body.day_of_month });

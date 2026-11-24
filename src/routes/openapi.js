@@ -845,15 +845,20 @@ router.post('/categories/:id/delete', requireWrite, (req, res) => {
   const c = findCategory(req, res);
   if (!c) return;
   if (c.is_system || c.ledger_id === null) return bad(res, 403, '系统内置分类不可删除');
-  // 只统计未删除的交易（与 Web 端口径一致）
-  const used = Number(get('SELECT COUNT(*) AS c FROM transactions WHERE ledger_id = ? AND deleted_at IS NULL AND category_id = ?', ledgerId, c.id)?.c || 0);
+  // 只统计未删除的交易（与 Web 端口径一致）；大分类需连子分类一起算
+  const used = Number(get(
+    `SELECT COUNT(*) AS c FROM transactions
+     WHERE ledger_id = ? AND deleted_at IS NULL
+       AND (category_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?))`,
+    ledgerId, c.id, c.id
+  )?.c || 0);
   if (used > 0) {
-    run('UPDATE categories SET is_archived = 1 WHERE id = ?', c.id);
+    run('UPDATE categories SET is_archived = 1 WHERE id = ? OR parent_id = ?', c.id, c.id);
     auth.audit(req, 'api.category.archive', { ledgerId, entity: 'category', entityId: c.id, detail: `有 ${used} 笔流水，改为归档` });
     return ok(res, { id: c.id, archived: true, used });
   }
-  run('DELETE FROM categories WHERE id = ?', c.id);
   run('DELETE FROM categories WHERE parent_id = ?', c.id);
+  run('DELETE FROM categories WHERE id = ?', c.id);
   auth.audit(req, 'api.category.delete', { ledgerId, entity: 'category', entityId: c.id, detail: c.name });
   ok(res, { id: c.id, deleted: true });
 });
@@ -1253,7 +1258,8 @@ router.post('/recurring', requireWrite, (req, res) => {
     const amt = it.amount_cents != null ? Math.abs(Math.round(Number(it.amount_cents) || 0)) : Math.abs(cents(it.amount));
     if (!amt) continue;
     items.push({
-      type: TYPE_ALIASES[String(it.type || 'expense').trim()] || 'expense',
+      // 周期账单明细没有 to_account，转账/投资类只能记成单边流水（钱会凭空消失），仅允许收支
+      type: TYPE_ALIASES[String(it.type || 'expense').trim()] === 'income' ? 'income' : 'expense',
       amount_cents: amt,
       category_id: validCategoryId(ledgerId, it.category_id),
       account_id: validAccountId(ledgerId, it.account_id),

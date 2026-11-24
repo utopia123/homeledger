@@ -183,8 +183,14 @@ router.post('/bulk', auth.requireLogin, auth.requireLedgerWrite, (req, res) => {
     case 'tag': {
       const tag = String(req.body.tag || '').trim();
       if (!tag) { res.flash('error', '请输入标签名'); break; }
-      for (const id of ids) txn.applyTags(id, ledgerId, tag, false);
-      res.flash('success', `已为 ${ids.length} 笔添加标签「${tag}」`);
+      // 只给本账本未删除的记录挂标签：applyTags 不做归属校验，
+      // 直接透传 ids 会给别的账本（甚至已删除）的交易挂上本账本的标签
+      const owned = all(
+        `SELECT id FROM transactions WHERE ledger_id = ? AND deleted_at IS NULL AND id IN (${placeholders})`,
+        ledgerId, ...ids
+      ).map((r) => Number(r.id));
+      for (const id of owned) txn.applyTags(id, ledgerId, tag, false);
+      res.flash('success', `已为 ${owned.length} 笔添加标签「${tag}」`);
       break;
     }
     case 'reimburse': {

@@ -236,13 +236,20 @@ router.post('/categories/:id/delete', auth.requireLogin, auth.requireLedgerWrite
     return res.redirect('/categories');
   }
   // 同账户删除：只统计未删除的交易（软删除的记录用户已看不见，不应阻止删除）
-  const used = Number(get('SELECT COUNT(*) AS c FROM transactions WHERE ledger_id = ? AND deleted_at IS NULL AND category_id = ?', ledgerId, id)?.c || 0);
+  // 大分类要连子分类一起算：只删父级会把子分类留在原地，其下流水全变成查不到名字的孤儿
+  const used = Number(get(
+    `SELECT COUNT(*) AS c FROM transactions
+     WHERE ledger_id = ? AND deleted_at IS NULL
+       AND (category_id = ? OR category_id IN (SELECT id FROM categories WHERE parent_id = ?))`,
+    ledgerId, id, id
+  )?.c || 0);
   if (used > 0) {
-    run('UPDATE categories SET is_archived = 1 WHERE id = ?', id);
+    // 归档也必须级联：否则父分类消失了，子分类还挂在选择列表里
+    run('UPDATE categories SET is_archived = 1 WHERE id = ? OR parent_id = ?', id, id);
     res.flash('success', '该分类下已有记录，已改为「归档」不再出现在选择列表');
   } else {
-    run('DELETE FROM categories WHERE id = ?', id);
     run('DELETE FROM categories WHERE parent_id = ?', id);
+    run('DELETE FROM categories WHERE id = ?', id);
     res.flash('success', '分类已删除');
   }
   res.redirect('/categories');

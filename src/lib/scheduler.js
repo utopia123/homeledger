@@ -54,6 +54,21 @@ function ruleItems(payload) {
   return p ? [p] : [];
 }
 
+/**
+ * 规则的创建人：recurring_rules 表里没有 created_by_user_id 字段（那是 subscriptions 的），
+ * 创建人一直存在 payload.user_id 里。原实现读不存在的列，导致自动记账全部记到 user_id=1（管理员）名下，
+ * 成员统计与「谁记的账」全部失真。
+ */
+function ruleOwnerId(rule) {
+  try {
+    const p = typeof rule.payload === 'string' ? JSON.parse(rule.payload) : rule.payload;
+    const id = Number(p && p.user_id);
+    return Number.isInteger(id) && id > 0 ? id : 1;
+  } catch {
+    return 1;
+  }
+}
+
 function runDueRecurring(today = todayStr()) {
   const rules = all('SELECT * FROM recurring_rules WHERE is_active = 1 AND next_run_at <= ?', today);
   const { recalcBalances } = require('../db');
@@ -74,7 +89,7 @@ function runDueRecurring(today = todayStr()) {
              VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
             rule.ledger_id, p.type || 'expense', amount, p.currency || 'CNY', 1, amount,
             p.account_id || null, p.to_account_id || null, p.category_id || null,
-            rule.created_by_user_id || 1, rule.next_run_at,
+            ruleOwnerId(rule), rule.next_run_at,
             p.note || rule.name, p.merchant || null, 'cleared', 'recurring', nowStr(), nowStr()
           );
           created++;
@@ -308,4 +323,4 @@ function initScheduler() {
   return timer;
 }
 
-module.exports = { initScheduler, runDaily, runDueRecurring, runSubscriptions, checkBudgets, checkDebts, checkGoals, budgetPeriodRange, budgetUsedInRange, budgetUsed, advanceDate, ruleItems };
+module.exports = { initScheduler, runDaily, runDueRecurring, runSubscriptions, checkBudgets, checkDebts, checkGoals, budgetPeriodRange, budgetUsedInRange, budgetUsed, advanceDate, ruleItems, ruleOwnerId };

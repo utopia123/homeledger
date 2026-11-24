@@ -697,9 +697,15 @@ router.post('/backup/restore', auth.requireLogin, auth.requireAdmin, (req, res) 
       return done(false, '文件不是有效的 SQLite 数据库');
     }
 
-    // 安全备份当前数据
+    // 安全备份当前数据：WAL 模式下 copyFileSync 只拷主库文件，会漏掉还留在 -wal 里的写入
+    // （极端情况连建表语句都在 WAL 里，拷出来的"备份"打不开）。必须用 VACUUM INTO 出一致快照。
     const safety = path.join(DATA_DIR, `pre-restore-${Date.now()}.db`);
-    try { fs.copyFileSync(DB_FILE, safety); } catch { /* 首次启动可能无旧库 */ }
+    try {
+      require('../db').db.exec(`VACUUM INTO '${safety.replace(/'/g, "''")}'`);
+    } catch {
+      // 兜底：极端情况下 VACUUM 失败（磁盘满等）仍留一份文件级拷贝，聊胜于无
+      try { fs.copyFileSync(DB_FILE, safety); } catch { /* 首次启动可能无旧库 */ }
+    }
 
     // 一致性校验：用独立连接打开上传文件
     const tmpCheck = path.join(DATA_DIR, `restore-check-${Date.now()}.db`);
@@ -721,7 +727,9 @@ router.post('/backup/restore', auth.requireLogin, auth.requireAdmin, (req, res) 
     const newPath = path.join(DATA_DIR, 'restore-new.db');
     fs.writeFileSync(newPath, buf);
     const { reopenDatabase } = require('../db');
-    try { DB.close(); } catch { /* ignore */ }
+    // 必须先关掉当前连接再替换文件：Windows 下目标文件被占用时 rename 会直接 EPERM/EBUSY。
+    // 这里原写法引用了未定义的 DB，ReferenceError 被 catch 吞掉，等于「从未关闭」。
+    try { require('../db').db.close(); } catch { /* ignore */ }
     for (const suffix of ['-wal', '-shm']) {
       try { fs.unlinkSync(DB_FILE + suffix); } catch { /* ignore */ }
     }
