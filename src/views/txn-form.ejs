@@ -171,6 +171,17 @@
           <span class="muted small" id="cat-hint"><%= t.category_path && t.category_path !== '未分类' ? t.category_path : '未选择' %></span>
         </div>
 
+        <%# 手机端入口：一点即开抽屉，按「大类 → 小类」两级挑选，不必在长列表里滚 %>
+        <button type="button" class="cat-trigger" id="cat-trigger" aria-haspopup="dialog">
+          <span class="cat-trigger-ico" id="cat-trigger-ico">🏷️</span>
+          <span class="cat-trigger-text">
+            <span class="cat-trigger-label" id="cat-trigger-label"><%= t.category_path && t.category_path !== '未分类' ? t.category_path : '选择分类' %></span>
+            <span class="cat-trigger-sub">点开挑选，选完按「确定」</span>
+          </span>
+          <svg class="icon sm"><use href="#i-chevron-right"></use></svg>
+        </button>
+
+        <div class="cat-inline">
         <% ['expense','income'].forEach(function(kind){ %>
           <div class="cat-section <%= kind === catKind ? '' : 'hidden' %>" data-cat-kind="<%= kind %>">
             <div class="type-tabs mb12" style="background:transparent;border:0;padding:0;gap:6px">
@@ -199,6 +210,7 @@
             </div>
           </div>
         <% }); %>
+        </div>
       </div>
 
       <div class="card">
@@ -240,6 +252,21 @@
     </div>
   </div>
 <% } %>
+
+<%
+  // 分类树 → 抽屉用的精简结构（只带 id/名称/图标，避免把整表字段塞进页面）
+  var catTreeOf = function (list) {
+    return (list || []).map(function (r) {
+      return {
+        id: r.id, name: r.name, icon: r.icon,
+        children: (r.children || []).map(function (c) { return { id: c.id, name: c.name, icon: c.icon }; })
+      };
+    });
+  };
+  var catData = { expense: catTreeOf(form.expenseTree), income: catTreeOf(form.incomeTree) };
+%>
+<div id="cat-sheet-root"></div>
+<script id="cat-tree" type="application/json"><%- helpers.jsonForScript(catData) %></script>
 
 <script>
 (function(){
@@ -294,5 +321,184 @@
       });
     });
   });
+
+  /* ---------------- 分类抽屉（手机端：大类 → 小类 → 确定） ---------------- */
+  (function initCatPicker(){
+    var dataEl = document.getElementById('cat-tree');
+    var trigger = document.getElementById('cat-trigger');
+    var hidden = document.getElementById('f-category');
+    var hint = document.getElementById('cat-hint');
+    var labelEl = document.getElementById('cat-trigger-label');
+    var icoEl = document.getElementById('cat-trigger-ico');
+    var rootEl = document.getElementById('cat-sheet-root');
+    if (!dataEl || !trigger || !hidden || !rootEl) return;
+
+    var TREE;
+    try { TREE = JSON.parse(dataEl.textContent); } catch (e) { return; }
+
+    var mask = null, bodyEl = null, titleEl = null, okBtn = null, crumbEl = null;
+    var pending = null;   // 抽屉里待确认的选择（不点确定就不写回表单）
+
+    function esc(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+      });
+    }
+    // 当前是记支出还是记收入：看哪一类分类区块可见（类型切换由 applyType 控制）
+    function kind() {
+      var sec = document.querySelector('.cat-section:not(.hidden)');
+      return (sec && sec.dataset.catKind) || 'expense';
+    }
+    function roots() { return TREE[kind()] || []; }
+
+    /** 按 id 在树里定位，同时算出完整路径 */
+    function locate(id) {
+      if (id == null || id === '') return null;
+      var rs = roots();
+      for (var i = 0; i < rs.length; i++) {
+        if (String(rs[i].id) === String(id)) {
+          return { id: rs[i].id, name: rs[i].name, icon: rs[i].icon, path: rs[i].name + '（不细分）', rootId: rs[i].id };
+        }
+        var cs = rs[i].children || [];
+        for (var j = 0; j < cs.length; j++) {
+          if (String(cs[j].id) === String(id)) {
+            return { id: cs[j].id, name: cs[j].name, icon: cs[j].icon, path: rs[i].name + '/' + cs[j].name, rootId: rs[i].id };
+          }
+        }
+      }
+      return null;
+    }
+
+    function build() {
+      mask = document.createElement('div');
+      mask.className = 'modal-mask';
+      mask.innerHTML =
+        '<div class="modal cat-sheet" role="dialog" aria-modal="true" aria-label="选择分类">' +
+          '<div class="cat-sheet-head">' +
+            '<div class="cat-sheet-title" id="cat-sheet-title">选择分类</div>' +
+            '<button type="button" class="cat-sheet-close" data-close aria-label="关闭">✕</button>' +
+          '</div>' +
+          '<div class="cat-sheet-crumb hidden" id="cat-sheet-crumb">' +
+            '<button type="button" class="cat-back-btn" data-back><svg class="icon sm"><use href="#i-chevron-left"></use></svg>全部大类</button>' +
+          '</div>' +
+          '<div class="cat-sheet-body" id="cat-sheet-body"></div>' +
+          '<div class="cat-sheet-foot">' +
+            '<button type="button" class="btn" data-close>取消</button>' +
+            '<button type="button" class="btn btn-primary" id="cat-sheet-ok" disabled>确定</button>' +
+          '</div>' +
+        '</div>';
+      rootEl.appendChild(mask);
+      bodyEl = mask.querySelector('#cat-sheet-body');
+      titleEl = mask.querySelector('#cat-sheet-title');
+      okBtn = mask.querySelector('#cat-sheet-ok');
+      crumbEl = mask.querySelector('#cat-sheet-crumb');
+      mask.addEventListener('click', function (e) {
+        if (e.target === mask) return close();
+        if (e.target.closest('[data-close]')) return close();
+        if (e.target.closest('[data-back]')) return showRoots();
+        if (e.target.closest('#cat-sheet-ok')) return apply();
+        var rootBtn = e.target.closest('[data-root]');
+        if (rootBtn) return showRoot(Number(rootBtn.dataset.root));
+        var cell = e.target.closest('[data-cat]');
+        if (cell) return mark(Number(cell.dataset.cat), cell);
+      });
+    }
+
+    /** 第一级：全部大类 */
+    function showRoots() {
+      titleEl.textContent = kind() === 'income' ? '选择收入分类' : '选择支出分类';
+      crumbEl.classList.add('hidden');
+      var html = '<div class="cat-sheet-grid">';
+      roots().forEach(function (r) {
+        var on = pending && String(pending.id) === String(r.id);
+        html += '<button type="button" class="cat-tile' + (on ? ' selected' : '') + '" data-root="' + r.id + '">' +
+          '<span class="ci">' + esc(r.icon) + '</span>' +
+          '<span class="cn">' + esc(r.name) + '</span>' +
+          '<span class="cc">' + (r.children || []).length + ' 项</span></button>';
+      });
+      html += '</div>';
+      bodyEl.innerHTML = html;
+      bodyEl.scrollTop = 0;
+    }
+
+    /** 第二级：某个大类下的子类（外加「不细分」= 直接选大类） */
+    function showRoot(id) {
+      var r = null;
+      roots().forEach(function (x) { if (String(x.id) === String(id)) r = x; });
+      if (!r) return;
+      if (!r.children || !r.children.length) {  // 没有子类的大类：直接选定
+        mark(r.id, null);
+        return apply();
+      }
+      titleEl.textContent = r.icon + ' ' + r.name;
+      crumbEl.classList.remove('hidden');
+      var html = '<div class="cat-sheet-grid">';
+      r.children.forEach(function (c) {
+        var on = pending && String(pending.id) === String(c.id);
+        html += '<button type="button" class="cat-tile' + (on ? ' selected' : '') + '" data-cat="' + c.id + '">' +
+          '<span class="ci">' + esc(c.icon) + '</span><span class="cn">' + esc(c.name) + '</span></button>';
+      });
+      var onRoot = pending && String(pending.id) === String(r.id);
+      html += '<button type="button" class="cat-tile' + (onRoot ? ' selected' : '') + '" data-cat="' + r.id + '">' +
+        '<span class="ci">📁</span><span class="cn">不细分</span></button>';
+      html += '</div>';
+      bodyEl.innerHTML = html;
+      bodyEl.scrollTop = 0;
+    }
+
+    function mark(id, cell) {
+      var found = locate(id);
+      if (!found) return;
+      pending = found;
+      Array.prototype.forEach.call(bodyEl.querySelectorAll('.cat-tile'), function (t) { t.classList.remove('selected'); });
+      if (cell) cell.classList.add('selected');
+      okBtn.disabled = false;
+    }
+
+    function apply() {
+      if (!pending) return;
+      hidden.value = pending.id;
+      if (hint) hint.textContent = pending.path;
+      if (labelEl) labelEl.textContent = pending.path;
+      if (icoEl) icoEl.textContent = pending.icon || '🏷️';
+      // 桌面行内网格同步高亮，两套 UI 的状态不能各说各话
+      document.querySelectorAll('.cat-item').forEach(function (a) {
+        a.classList.toggle('selected', String(a.dataset.id) === String(pending.id));
+      });
+      close();
+      trigger.focus();
+    }
+
+    function open() {
+      if (mask) close();
+      build();
+      pending = locate(hidden.value);
+      showRoots();
+      // 已有选择时直接进到对应大类，方便就地换小类
+      if (pending && pending.rootId) showRoot(pending.rootId);
+      okBtn.disabled = !pending;
+      document.body.classList.add('sheet-open');
+    }
+
+    function close() {
+      if (!mask) return;
+      if (mask.parentNode) mask.remove();
+      mask = bodyEl = titleEl = okBtn = crumbEl = null;
+      document.body.classList.remove('sheet-open');
+    }
+
+    trigger.addEventListener('click', open);
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && mask) close();
+    });
+    // 桌面端点行内分类后，同步手机入口上的文案
+    document.querySelectorAll('.cat-item').forEach(function (a) {
+      a.addEventListener('click', function () {
+        if (labelEl) labelEl.textContent = a.dataset.path || a.dataset.name || '选择分类';
+        var ci = a.querySelector('.ci');
+        if (icoEl && ci) icoEl.textContent = ci.textContent;
+      });
+    });
+  })();
 })();
 </script>
