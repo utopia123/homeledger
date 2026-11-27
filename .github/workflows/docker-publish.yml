@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # GHCR 镜像名必须全小写；fork 后仓库属主（如 Panda-995）含大写会直接推送失败
+      # GHCR 镜像名必须全小写；fork 后仓库属主若含大写字母会直接推送失败
       - name: Compute lowercase image name
         id: image
         run: echo "name=${REGISTRY}/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"

@@ -1,6 +1,6 @@
-# 📒 家账簿 HomeLedger（Panda-995 维护版）
+# 📒 家账簿 HomeLedger（utopia123 维护版）
 
-> 本仓库是 [sucraft-hub/homeledger](https://github.com/sucraft-hub/homeledger) 的 fork。感谢原作者 [@蘇先生](https://github.com/sucraft-hub) 的优秀项目——本仓库在其基础上持续增强：全新 UI/移动端适配、开放 API 全量开放、AI 助手接入、大量安全与功能修复。上游有价值的更新也会酌情同步。
+> 本仓库 fork 自 [Panda-995/homeledger](https://github.com/Panda-995/homeledger)（维护版），后者 fork 自 [sucraft-hub/homeledger](https://github.com/sucraft-hub/homeledger)（原版，作者 [@蘇先生](https://github.com/sucraft-hub)）。感谢原作者與上游维护者的工作——本仓库在此基础上持续增强：全新 UI/移动端适配、开放 API 全量开放、AI 助手接入、大量安全与功能修复。上游有价值的更新也会酌情同步。
 
 **自托管的家庭记账系统**：网页手动记账 + AI 截图/文本自动记账 + 开放 API 对接聊天机器人（Hermes / OpenClaw 等），所有账目数据都留在你自己的 NAS / 服务器上。
 
@@ -37,7 +37,7 @@
 ```yaml
 services:
   homeledger:
-    image: ghcr.milu.moe/panda-995/homeledger:latest   # 加速中转；直连可用 ghcr.io/panda-995/homeledger:latest
+    image: ghcr.milu.moe/utopia123/homeledger:latest   # 加速中转；直连可用 ghcr.io/utopia123/homeledger:latest
     container_name: homeledger
     user: "0:0"        # 免 chown 方案；或对宿主机 data 目录执行 chown -R 1000:1000 后删掉本行
     restart: unless-stopped
@@ -73,6 +73,12 @@ AI 截图/文本识别使用 OpenAI 兼容接口（智谱 GLM、通义、DeepSee
 ## 📦 更新记录
 
 > 本节随每次发版更新；完整交互式日志见应用内「关于」页。
+
+### v1.9.1（2026-11-27）
+
+- 🏷️ **仓库与维护者身份切换为 `utopia123/homeledger`**：关于页反馈入口、作者/维护者署名、提 Issue 链接全部指向本仓库；保留原项目（sucraft-hub/homeledger，作者蘇先生）与上游 fork 的署名
+- 🐳 **镜像地址改为 `ghcr.io/utopia123/homeledger`**（加速中转 `ghcr.milu.moe/utopia123/homeledger`）；飞牛 fpk 的 maintainer / distributor 元数据同步更新
+- ⚠️ 镜像由 GitHub Actions 在推送 `v*` tag 时构建，**fork 仓库首次需在 Actions 页面手动启用工作流**；镜像构建完成前，compose 里的新镜像地址拉不到
 
 ### v1.9.0（2026-11-24）
 
@@ -190,7 +196,7 @@ AI 截图/文本识别使用 OpenAI 兼容接口（智谱 GLM、通义、DeepSee
 
 ### v1.6.1（2026-10-04）
 
-- 🏷️ 关于页与项目署名切换为 fork 身份：提需求 / 报 Bug 指向 Panda-995/homeledger，维护者标注为 Panda-995
+- 🏷️ 关于页与项目署名切换为 fork 身份：提需求 / 报 Bug 指向本仓库，维护者标注为 fork 维护者
 - 📎 运行环境注明源仓库（sucraft-hub/homeledger，作者蘇先生）链接，保留 AI 辅助生成声明
 - 📦 飞牛 fpk 打包元数据同步更新
 

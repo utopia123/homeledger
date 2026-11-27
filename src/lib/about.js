@@ -8,7 +8,7 @@
  *     页面其余内容不受影响。
  * UPSTREAM：源仓库地址，关于页会注明项目来源与原作者。
  */
-const GITHUB_REPO = 'https://github.com/Panda-995/homeledger';
+const GITHUB_REPO = 'https://github.com/utopia123/homeledger';
 const UPSTREAM = {
   name: '家账簿 HomeLedger（原版）',
   url: 'https://github.com/sucraft-hub/homeledger',
@@ -22,8 +22,8 @@ const APP = {
     '纯后端 SSR 架构，数据 100% 存放在你自己的 NAS / 服务器上。' +
     '支持文字与截图 AI 自动记账、订阅扣费管理、预算与储蓄目标、开放 API 对接，' +
     '零原生依赖，单进程即可运行。',
-  author: 'Panda-995',
-  maintainerNote: 'Fork 版本由 Panda-995 维护与更新（不自动同步上游）。',
+  author: 'utopia123',
+  maintainerNote: 'Fork 版本由 utopia123 维护与更新（不自动同步上游）。',
   aiNote: '本项目的部分代码与文档由 AI 辅助生成。',
 };
 
@@ -43,9 +43,19 @@ const FEATURES = [
  */
 const CHANGELOG = [
   {
+    version: '1.9.1',
+    date: '2026-11-27',
+    tag: '当前版本',
+    items: [
+      '仓库与维护者身份切换为 utopia123/homeledger：关于页的反馈入口、作者与维护者署名、提 Issue 链接全部指向本仓库；保留原项目（sucraft-hub/homeledger，作者蘇先生）与上游 fork 的署名',
+      'Docker 镜像地址同步改为 ghcr.io/utopia123/homeledger（加速中转 ghcr.milu.moe/utopia123/homeledger）；飞牛 fpk 打包的 maintainer / distributor 元数据一并更新',
+      '注意：镜像由 GitHub Actions 在推送 v* tag 时构建；fork 仓库首次需要在 Actions 页手动启用工作流',
+    ],
+  },
+  {
     version: '1.9.0',
     date: '2026-11-24',
-    tag: '当前版本',
+    tag: '',
     items: [
       '新增：手机端「记一笔」的分类改为抽屉式两级挑选——点开是 20 个大类（带项数），进二级取子类，选中按「确定」才写回；不再在上百个格子的长列表里反复滚动。桌面端不受影响，仍是行内网格',
       '修复：周期账单「下次执行日」选任何日期都被改回今天——日期正则漏写反斜杠（/^d{4}-d{2}-d{2}$/），校验恒不通过，一律回落今天',
@@ -224,8 +234,8 @@ const CHANGELOG = [
     date: '2026-10-04',
     tag: '',
     items: [
-      '关于页与项目署名切换为 fork 身份：提需求 / 报 Bug 指向 Panda-995/homeledger',
-      '运行环境注明维护者为 Panda-995，并保留源仓库（sucraft-hub/homeledger，作者蘇先生）链接与 AI 辅助声明',
+      '关于页与项目署名切换为 fork 身份：提需求 / 报 Bug 指向本仓库，维护者与运行环境信息标注为 fork 维护者',
+      '保留源仓库（sucraft-hub/homeledger，作者蘇先生）链接与 AI 辅助声明',
       '飞牛 fpk 打包元数据同步更新',
     ],
   },
